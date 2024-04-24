@@ -4,6 +4,7 @@ package ua.hodik.testTask.util;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.validation.BindingResult;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
 import ua.hodik.testTask.dto.UserDto;
@@ -11,7 +12,7 @@ import ua.hodik.testTask.dto.UserDto;
 import java.time.LocalDate;
 
 @Component("userValidator")
-public class UserValidator implements Validator {
+public class UserValidator implements AbstractValidator {
     @Value("${minAge}")
     private int minAge;
 
@@ -31,5 +32,6 @@ public class UserValidator implements Validator {
         if (birthDate.plusYears(minAge).isAfter(LocalDate.now())) {
             errors.rejectValue("birthDate", "", "You are too young!!!");
         }
+        bindErrors((BindingResult) errors);
     }
 }

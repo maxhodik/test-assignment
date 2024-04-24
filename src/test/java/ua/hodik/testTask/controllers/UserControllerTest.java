@@ -56,11 +56,6 @@ class UserControllerTest {
 
     private final DateFormDto dateForm = new DateFormDto(LocalDate.now().minusDays(1), LocalDate.now());
     private final Gson gson = new Gson();
-//    private final JsonNode jsonPatch = gson.fromJson(TestUtils.readResource("user.to.update.json"), JsonNode.class);
-
-    //    @Spy
-//    @InjectMocks
-//
 
     @Autowired
     private MockMvc mvc;

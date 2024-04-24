@@ -13,6 +13,7 @@ import java.time.LocalDate;
 @Data
 public class UserDto {
 
+    private long id;
     @NotBlank(message = "Should not be empty")
     @Email
     private String email;
