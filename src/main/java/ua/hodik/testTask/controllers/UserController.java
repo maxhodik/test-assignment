@@ -35,6 +35,7 @@ public class UserController {
     private final ObjectMapper objectMapper;
 
     private final Validator userValidator;
+    private final Validator dateValidator;
 
     private final UserDao userDao;
 
@@ -45,6 +46,7 @@ public class UserController {
         this.userMapper = userMapper;
         this.objectMapper = objectMapper;
         this.userValidator = userValidator;
+        this.dateValidator = dateValidator;
         this.userDao = userDao;
     }
 
@@ -58,8 +60,7 @@ public class UserController {
         }
         User user = userDao.create(userMapper.convertToUser(userDTO));
         UserDto userDto = userMapper.convertToUserDto(user);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(userDto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(userDto);
     }
 
     @GetMapping
@@ -69,10 +70,8 @@ public class UserController {
     }
 
     @PatchMapping("/{email}")
-    public ResponseEntity<UserDto> patchUpdate(@PathVariable String email, @RequestBody JsonPatch jsonPatch,
-                                               BindingResult bindingResult) {
-        User user = userDao.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException(String.format("User with email %s not found", email)));
+    public ResponseEntity<UserDto> patchUpdate(@PathVariable String email, @RequestBody JsonPatch jsonPatch, BindingResult bindingResult) {
+        User user = userDao.findByEmail(email).orElseThrow(() -> new UserNotFoundException(String.format("User with email %s not found", email)));
         UserDto userDto = userMapper.convertToUserDto(user);
         UserDto userDtoToUpdate;
         try {
@@ -90,8 +89,7 @@ public class UserController {
     }
 
     @PutMapping("/{email}")
-    public ResponseEntity<UserDto> update(@PathVariable String email, @RequestBody UserDto userDto,
-                                          BindingResult bindingResult) {
+    public ResponseEntity<UserDto> update(@PathVariable String email, @RequestBody UserDto userDto, BindingResult bindingResult) {
         validateUser(userDto, bindingResult);
         isUserExists(email);
         User updatedUser = userDao.update(email, userMapper.convertToUser(userDto));
@@ -108,7 +106,7 @@ public class UserController {
 
     @PostMapping("/search")
     public ResponseEntity<List<UserDto>> searchByDateRange(@RequestBody @Valid DateFormDto dateForm, BindingResult bindingResult) {
-//        dateValidator.validate(dateForm, bindingResult);
+    dateValidator.validate(dateForm, bindingResult);
         bindErrors(bindingResult);
         LocalDate from = dateForm.getFrom();
         LocalDate to = dateForm.getTo();
@@ -121,15 +119,13 @@ public class UserController {
         return users.stream().map(userMapper::convertToUserDto).toList();
     }
 
-    private UserDto applyPatchToUser(
-            JsonPatch patch, UserDto targetUser) throws JsonPatchException, JsonProcessingException {
+    private UserDto applyPatchToUser(JsonPatch patch, UserDto targetUser) throws JsonPatchException, JsonProcessingException {
         JsonNode patched = patch.apply(objectMapper.convertValue(targetUser, JsonNode.class));
         return objectMapper.treeToValue(patched, UserDto.class);
     }
 
     private void isUserExists(String email) {
-        userDao.findByEmail(email)
-                .orElseThrow(() -> new UserNotFoundException(String.format("User with email %s not found", email)));
+        userDao.findByEmail(email).orElseThrow(() -> new UserNotFoundException(String.format("User with email %s not found", email)));
     }
 
     private void validateUser(UserDto userDTO, BindingResult bindingResult) {
@@ -142,10 +138,7 @@ public class UserController {
             StringBuilder errorMsg = new StringBuilder();
             List<FieldError> errors = bindingResult.getFieldErrors();
             for (FieldError error : errors) {
-                errorMsg.append(error.getField())
-                        .append(" - ")
-                        .append(error.getDefaultMessage())
-                        .append(";");
+                errorMsg.append(error.getField()).append(" - ").append(error.getDefaultMessage()).append(";");
             }
             throw new InvalidDataException(errorMsg.toString());
         }
