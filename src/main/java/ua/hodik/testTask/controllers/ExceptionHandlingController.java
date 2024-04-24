@@ -18,6 +18,14 @@ public class ExceptionHandlingController {
     }
 
     @ExceptionHandler
+    private ResponseEntity<ErrorResponse> exceptionHandler(InvalidDataException e) {
+        ErrorResponse message = new ErrorResponse(e.getMessage());
+        ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
+
+    }
+
+    @ExceptionHandler
     private ResponseEntity<ErrorResponse> exceptionHandler(UserNotCreatedException e) {
         ErrorResponse message = new ErrorResponse(e.getMessage());
 
@@ -29,14 +37,17 @@ public class ExceptionHandlingController {
         ErrorResponse message = new ErrorResponse(e.getMessage());
         return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
     }
+
     @ExceptionHandler
     private ResponseEntity<ErrorResponse> exceptionHandler(UserNotFoundException e) {
         ErrorResponse message = new ErrorResponse(e.getMessage());
-        return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(message, HttpStatus.NOT_FOUND);
     }
+
     @ExceptionHandler
-    private ResponseEntity<ErrorResponse> exceptionHandler(InvalidDataException e) {
+    private ResponseEntity<ErrorResponse> exceptionHandler(UserNotUpdatedException e) {
         ErrorResponse message = new ErrorResponse(e.getMessage());
         return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
     }
+
 }

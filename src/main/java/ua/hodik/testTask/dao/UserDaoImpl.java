@@ -24,7 +24,7 @@ public class UserDaoImpl implements UserDao {
     @Override
     public User update(String email, User user) {
          userMap.put(email, user);
-         return userMap.get(email);
+         return user;
     }
 
     @Override

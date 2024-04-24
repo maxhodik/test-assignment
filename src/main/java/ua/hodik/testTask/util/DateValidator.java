@@ -20,7 +20,7 @@ public class DateValidator implements Validator {
         LocalDate from= dateFormDto.getFrom();
         LocalDate to= dateFormDto.getTo();
         if(from.isAfter(to)){
-            errors.rejectValue("from", "", "From date should be before to date");
+            errors.rejectValue("from", "", "'From' date should be before 'to' date");
         }
 
     }

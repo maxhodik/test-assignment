@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.Validator;
@@ -70,8 +71,9 @@ public class UserController {
     }
 
     @PatchMapping("/{email}")
-    public ResponseEntity<UserDto> patchUpdate(@PathVariable String email, @RequestBody JsonPatch jsonPatch, BindingResult bindingResult) {
-        User user = userDao.findByEmail(email).orElseThrow(() -> new UserNotFoundException(String.format("User with email %s not found", email)));
+    public ResponseEntity<UserDto> patchUpdate(@PathVariable String email, @RequestBody JsonPatch jsonPatch) {
+        User user = userDao.findByEmail(email)
+                .orElseThrow(() -> new UserNotFoundException(String.format("User with email %s not found", email)));
         UserDto userDto = userMapper.convertToUserDto(user);
         UserDto userDtoToUpdate;
         try {
@@ -79,13 +81,11 @@ public class UserController {
         } catch (JsonPatchException | JsonProcessingException e) {
             throw new UserNotUpdatedException(String.format("User with email %s not updated", email), e);
         }
-
-        validateUser(userDtoToUpdate, bindingResult);
+        BindingResult errors = new BeanPropertyBindingResult(userDtoToUpdate, "userDtoToUpdate");
+        validateUser(userDtoToUpdate, errors);
         User userToUpdate = userMapper.convertToUser(userDtoToUpdate);
         User updatedUser = userDao.update(email, userToUpdate);
-        UserDto updatedUserDto = userMapper.convertToUserDto(updatedUser);
-        return ResponseEntity.status(HttpStatus.OK).body(updatedUserDto);
-
+        return ResponseEntity.status(HttpStatus.OK).body(userDtoToUpdate);
     }
 
     @PutMapping("/{email}")
@@ -106,7 +106,7 @@ public class UserController {
 
     @PostMapping("/search")
     public ResponseEntity<List<UserDto>> searchByDateRange(@RequestBody @Valid DateFormDto dateForm, BindingResult bindingResult) {
-    dateValidator.validate(dateForm, bindingResult);
+        dateValidator.validate(dateForm, bindingResult);
         bindErrors(bindingResult);
         LocalDate from = dateForm.getFrom();
         LocalDate to = dateForm.getTo();
