@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
+import lombok.Builder;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -18,9 +19,9 @@ public class UserDto {
     @Email
     private String email;
     @NotBlank(message = "Should not be empty")
-    private String FirstName;
+    private String firstName;
     @NotBlank(message = "Should not be empty")
-    private String LastName;
+    private String lastName;
     @Past(message = "date has to be in past")
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
     @JsonFormat(pattern = "dd.MM.yyyy")

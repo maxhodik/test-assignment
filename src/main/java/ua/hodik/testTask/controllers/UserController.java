@@ -1,6 +1,5 @@
 package ua.hodik.testTask.controllers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.fge.jsonpatch.JsonPatch;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,35 +9,27 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.Validator;
 import org.springframework.web.bind.annotation.*;
-import ua.hodik.testTask.dao.UserDao;
 import ua.hodik.testTask.dto.DateFormDto;
 import ua.hodik.testTask.dto.UserDto;
 import ua.hodik.testTask.service.UserService;
-import ua.hodik.testTask.util.UserMapper;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/users")
 public class UserController {
-    private final UserMapper userMapper;
-    private final ObjectMapper objectMapper;
+
 
     private final Validator userValidator;
     private final Validator dateValidator;
-
-    private final UserDao userDao;
     private final UserService userService;
 
     @Autowired
-    public UserController(UserMapper userMapper, ObjectMapper objectMapper,
-                          @Qualifier("userValidator") Validator userValidator,
-                          @Qualifier("dateValidator") Validator dateValidator, UserDao userDao, UserService userService) {
-        this.userMapper = userMapper;
-        this.objectMapper = objectMapper;
+    public UserController(@Qualifier("userValidator") Validator userValidator,
+                          @Qualifier("dateValidator") Validator dateValidator, UserService userService) {
+
         this.userValidator = userValidator;
         this.dateValidator = dateValidator;
-        this.userDao = userDao;
         this.userService = userService;
     }
 

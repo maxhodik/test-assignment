@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.gson.Gson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,25 +19,24 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
-import org.springframework.validation.Validator;
 import ua.hodik.testTask.TestConfiguration;
-import ua.hodik.testTask.dao.UserDao;
 import ua.hodik.testTask.dto.DateFormDto;
 import ua.hodik.testTask.dto.UserDto;
+import ua.hodik.testTask.exceptions.UserAlreadyExistsException;
+import ua.hodik.testTask.exceptions.UserNotFoundException;
+import ua.hodik.testTask.exceptions.UserNotUpdatedException;
 import ua.hodik.testTask.model.User;
-import ua.hodik.testTask.util.UserMapper;
+import ua.hodik.testTask.service.UserService;
+import ua.hodik.testTask.util.AbstractValidator;
 
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -47,15 +45,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = UserController.class)
 @Import(TestConfiguration.class)
 class UserControllerTest {
+    public static final String USER_WITH_EMAIL_TEST_GMAIL_COM_ALREADY_EXISTS = "User with email test@gmail.com already exists ";
+    public static final String FIRST_NAME_SHOULD_NOT_BE_EMPTY = "firstName - Should not be empty;";
+    public static final String FIRST_NAME_SHOULD_NOT_BE_EMPTY_BIRTH_DATE_YOU_ARE_TOO_YOUNG = "firstName - Should not be empty;birthDate - You are too young!!!;";
+    public static final String USER_WITH_EMAIL_TEST_GMAIL_COM_NOT_FOUND = "User with email test@gmail.com not found";
+    public static final String USER_WITH_EMAIL_NONEXISTENT_GMAIL_COM_NOT_FOUND = "User with email nonexistent@gmail.com not found";
+    public static final String USER_WITH_EMAIL_USER_EXAMPLE_COM_NOT_UPDATED = "User with email user@example.com not updated";
+    public static final String MESSAGE = "$.message";
+    public static final String $_EMAIL = "$.email";
+    public static final String $_FIRST_NAME = "$.firstName";
+    public static final String $_LAST_NAME = "$.lastName";
+    public static final String $_BIRTH_DATE = "$.birthDate";
+    public static final String $_ADDRESS = "$.address";
+    public static final String $_PHONE_NUMBER = "$.phoneNumber";
     private UserDto userDto;
-    private static final UserDto UPDATED_USER_DTO = createUpdatedUserDto();
     private static final JsonNode JSON_NODE = createJsonPatch();
     private static final JsonNode JSON_INCORRECT_NODE = createIncorrectJsonPatch();
+    private static final String EMAIL = "test@gmail.com";
+    private static final String UPDATED_EMAIL = "new@gmail.com";
+    private static final UserDto UPDATED_USER_DTO = createUserDto(UPDATED_EMAIL);
+    private static final String FIRST_NAME = "John";
+    private static final String LAST_NAME = "Obama";
 
-    private final User user = createTestUser();
+    private static final LocalDate BIRTH_DATE = LocalDate.of(2000, 1, 1);
+    private static final String ADDRESS = "Kyiv, 25";
+    private static final String PHONE_NUMBER = "+1234567890";
 
-    private final DateFormDto dateForm = new DateFormDto(LocalDate.now().minusDays(1), LocalDate.now());
-    private final Gson gson = new Gson();
+    private static final DateFormDto DATE_FORM = new DateFormDto(LocalDate.now().minusDays(1), LocalDate.now());
+
 
     @Autowired
     private MockMvc mvc;
@@ -63,23 +80,20 @@ class UserControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
     @MockBean
-    private UserDao userDao;
-    @MockBean
-    private UserMapper userMapper;
+    private UserService userService;
+
     @SpyBean(name = "userValidator")
     @Qualifier("userValidator")
-    private Validator userValidator;
+    private AbstractValidator userValidator;
 
     @SpyBean(name = "dateValidator")
     @Qualifier("dateValidator")
-    private Validator dateValidator;
+    private AbstractValidator dateValidator;
 
-    @Autowired
-    private UserController controller;
 
     @BeforeEach
     public void setup() {
-        userDto = createTestUserDto();
+        userDto = createUserDto(EMAIL);
     }
 
     @Test
@@ -92,11 +106,8 @@ class UserControllerTest {
     @Test
     void testCreateUser_Success() throws Exception {
         //given
-        User user = new User();
-        when(userMapper.convertToUser(any(UserDto.class))).thenReturn(user);
-        when(userDao.findByEmail(userDto.getEmail())).thenReturn(Optional.empty());
-        when(userDao.create(user)).thenReturn(user);
-        when(userMapper.convertToUserDto(user)).thenReturn(userDto);
+        doCallRealMethod().when(userValidator).validate(any(), any());
+        when(userService.createUser(userDto)).thenReturn(userDto);
         //then
         mvc.perform(MockMvcRequestBuilders
                         .post("/users")
@@ -104,22 +115,23 @@ class UserControllerTest {
                         .content(objectMapper.writeValueAsString(userDto)))
                 .andExpect(status().isCreated())
                 .andExpect(MockMvcResultMatchers.content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.email").value("test@gmail.com"))
-                .andExpect(jsonPath("$.firstName").value("John"))
-                .andExpect(jsonPath("$.lastName").value("Obama"))
-                .andExpect(jsonPath("$.birthDate").value("01.01.2000"))
-                .andExpect(jsonPath("$.address").value("Kyiv, 25"))
-                .andExpect(jsonPath("$.phoneNumber").value("+1234567890"))
+                .andExpect(jsonPath($_EMAIL).value(EMAIL))
+                .andExpect(jsonPath($_FIRST_NAME).value(FIRST_NAME))
+                .andExpect(jsonPath($_LAST_NAME).value(LAST_NAME))
+                .andExpect(jsonPath($_BIRTH_DATE).value("01.01.2000"))
+                .andExpect(jsonPath($_ADDRESS).value(ADDRESS))
+                .andExpect(jsonPath($_PHONE_NUMBER).value(PHONE_NUMBER))
                 .andReturn();
     }
 
     @Test
     void testCreateUser_ShouldTrowException() throws Exception {
         //given
-        User user = new User();
-        when(userMapper.convertToUser(any(UserDto.class))).thenReturn(user);
-        when(userDao.findByEmail(userDto.getEmail())).thenReturn(Optional.of(user));
+        doCallRealMethod().when(userValidator).validate(any(), any());
+        UserAlreadyExistsException userAlreadyExistsException =
+                new UserAlreadyExistsException(USER_WITH_EMAIL_TEST_GMAIL_COM_ALREADY_EXISTS);
 
+        when(userService.createUser(userDto)).thenThrow(userAlreadyExistsException);
         //then
         mvc.perform(MockMvcRequestBuilders
                         .post("/users")
@@ -127,7 +139,7 @@ class UserControllerTest {
                         .content(objectMapper.writeValueAsString(userDto)))
                 .andExpect(status().isBadRequest())
                 .andExpect(MockMvcResultMatchers.content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("User with email test@gmail.com already exists "))
+                .andExpect(jsonPath(MESSAGE).value(USER_WITH_EMAIL_TEST_GMAIL_COM_ALREADY_EXISTS))
                 .andReturn();
     }
 
@@ -144,7 +156,7 @@ class UserControllerTest {
                         .content(objectMapper.writeValueAsString(userDto)))
                 .andExpect(status().isBadRequest())
                 .andExpect(MockMvcResultMatchers.content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("FirstName - Should not be empty;"))
+                .andExpect(jsonPath(MESSAGE).value(FIRST_NAME_SHOULD_NOT_BE_EMPTY))
                 .andReturn();
     }
 
@@ -161,18 +173,15 @@ class UserControllerTest {
                         .content(objectMapper.writeValueAsString(userDto)))
                 .andExpect(status().isBadRequest())
                 .andExpect(MockMvcResultMatchers.content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.message").value("FirstName - Should not be empty;birthDate - You are too young!!!;"))
+                .andExpect(jsonPath(MESSAGE).value(FIRST_NAME_SHOULD_NOT_BE_EMPTY_BIRTH_DATE_YOU_ARE_TOO_YOUNG))
                 .andReturn();
     }
 
     @Test
     void testUpdateUser_Success() throws Exception {
         //given
-        User user = new User();
-        when(userMapper.convertToUser(any(UserDto.class))).thenReturn(user);
-        when(userDao.findByEmail("test@gmail.com")).thenReturn(Optional.of(user));
-        when(userDao.update("test@gmail.com", user)).thenReturn(user);
-        when(userMapper.convertToUserDto(user)).thenReturn(userDto);
+        doCallRealMethod().when(userValidator).validate(any(), any());
+        when(userService.update(any(), any())).thenReturn(UPDATED_USER_DTO);
         //when then
         mvc.perform(MockMvcRequestBuilders
                         .put("/users/test@gmail.com")
@@ -180,27 +189,29 @@ class UserControllerTest {
                         .content(objectMapper.writeValueAsString(userDto)))
                 .andExpect(status().isOk())
                 .andExpect(MockMvcResultMatchers.content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.email").value("test@gmail.com")) // Check the response body
-                .andExpect(jsonPath("$.firstName").value("John"))
-                .andExpect(jsonPath("$.lastName").value("Obama"))
-                .andExpect(jsonPath("$.birthDate").value("01.01.2000"))
-                .andExpect(jsonPath("$.address").value("Kyiv, 25"))
-                .andExpect(jsonPath("$.phoneNumber").value("+1234567890"))
+                .andExpect(jsonPath($_EMAIL).value(UPDATED_EMAIL))
+                .andExpect(jsonPath($_FIRST_NAME).value(FIRST_NAME))
+                .andExpect(jsonPath($_LAST_NAME).value(LAST_NAME))
+                .andExpect(jsonPath($_BIRTH_DATE).value("01.01.2000"))
+                .andExpect(jsonPath($_ADDRESS).value(ADDRESS))
+                .andExpect(jsonPath($_PHONE_NUMBER).value(PHONE_NUMBER))
                 .andReturn();
-
-
     }
+
 
     @Test
     void testUpdateUser_UserNotFound() throws Exception {
         //given
-        when(userDao.findByEmail("test@gmail.com")).thenReturn(Optional.empty());
+        UserNotFoundException userNotFoundException =
+                new UserNotFoundException(USER_WITH_EMAIL_TEST_GMAIL_COM_NOT_FOUND);
+        userDto.setEmail(EMAIL);
+        when(userService.update(EMAIL, userDto)).thenThrow(userNotFoundException);
         //when then
         mvc.perform(MockMvcRequestBuilders
                         .put("/users/test@gmail.com")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(userDto)))
-                .andExpect(jsonPath("$.message").value("User with email test@gmail.com not found"))
+                .andExpect(jsonPath(MESSAGE).value(USER_WITH_EMAIL_TEST_GMAIL_COM_NOT_FOUND))
                 .andExpect(status().isNotFound());
     }
 
@@ -209,9 +220,6 @@ class UserControllerTest {
         //given
         userDto.setLastName(null);
         doCallRealMethod().when(userValidator).validate(any(), any());
-        User user = new User();
-        when(userMapper.convertToUser(any(UserDto.class))).thenReturn(user);
-        when(userDao.update(anyString(), any(User.class))).thenReturn(user);
         //when then
         mvc.perform(MockMvcRequestBuilders
                         .put("/users/test@gmail.com")
@@ -223,9 +231,7 @@ class UserControllerTest {
     @Test
     void testDeleteUser_Success() throws Exception {
 
-        User user = new User();
-
-        when(userDao.findByEmail("test@gmail.com")).thenReturn(Optional.of(user));
+        doNothing().when(userService).delete(EMAIL);
 
         mvc.perform(MockMvcRequestBuilders
                         .delete("/users/test@gmail.com")
@@ -237,52 +243,60 @@ class UserControllerTest {
 
     @Test
     void testDeleteUser_UserNotFound() throws Exception {
-        User user = new User();
-
-        when(userDao.findByEmail("test@gmail.com")).thenReturn(Optional.empty());
-
+        // given
+        UserNotFoundException userNotFoundException =
+                new UserNotFoundException(USER_WITH_EMAIL_TEST_GMAIL_COM_NOT_FOUND);
+        doThrow(userNotFoundException).when(userService).delete(EMAIL);
+        //when
+        //then
         mvc.perform(MockMvcRequestBuilders
                         .delete("/users/test@gmail.com")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(userDto)))
-                .andExpect(jsonPath("$.message").value("User with email test@gmail.com not found"))
+                .andExpect(jsonPath(MESSAGE).value(USER_WITH_EMAIL_TEST_GMAIL_COM_NOT_FOUND))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void testSearchByDateRange_ValidRequest() throws Exception {
-
-        List<User> users = Arrays.asList(new User(), new User());
-        when(userDao.searchByBirthDayRange(dateForm.getFrom(), dateForm.getTo())).thenReturn(users);
+        // given
+        List<UserDto> userDtoList = Arrays.asList(new UserDto(), new UserDto());
+        when(userService.searchByDateRange(any())).thenReturn(userDtoList);
         doCallRealMethod().when(dateValidator).validate(any(), any());
+        // when then
         mvc.perform(MockMvcRequestBuilders
                         .post("/users/search")
-                        .contentType("application/json")
-                        .content(objectMapper.writeValueAsString(dateForm)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(DATE_FORM)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)));
     }
 
     @Test
     void testSearchByDateRange_InvalidDateForm() throws Exception {
+        //given
         DateFormDto dateForm = new DateFormDto(LocalDate.now(), LocalDate.now().minusDays(1));
         doCallRealMethod().when(dateValidator).validate(any(), any());
+        //when
+        //then
         mvc.perform(MockMvcRequestBuilders
                         .post("/users/search")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dateForm)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("from - 'From' date should be before 'to' date;"));
+                .andExpect(jsonPath(MESSAGE).value("from - 'From' date should be before 'to' date;"));
     }
 
     @Test
     void testSearchByDateRange_ValidEmptyResult() throws Exception {
+        //given
         DateFormDto dateForm = new DateFormDto(LocalDate.now().minusDays(1), LocalDate.now());
-        when(userDao.searchByBirthDayRange(dateForm.getFrom(), dateForm.getTo())).thenReturn(Collections.emptyList());
-
+        when(userService.searchByDateRange(dateForm)).thenReturn(Collections.emptyList());
+        //when
+        //then
         mvc.perform(MockMvcRequestBuilders
                         .post("/users/search")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dateForm)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
@@ -294,7 +308,7 @@ class UserControllerTest {
         doCallRealMethod().when(dateValidator).validate(any(), any());
         mvc.perform(MockMvcRequestBuilders
                         .post("/users/search")
-                        .contentType("application/json")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidDateFormJson)))
                 .andExpect(status().isBadRequest());
     }
@@ -302,16 +316,9 @@ class UserControllerTest {
     @Test
     void patchUpdate_ExistingUserEmailPatched_ReturnsUpdatedUser() throws Exception {
         // given
-        String email = "test@gmail.com";
-        String updatedEmail = "new@gmail.com";
-        User updatedUser = user;
-        updatedUser.setEmail(updatedEmail);
-
-        when(userDao.findByEmail(email)).thenReturn(Optional.of(user));
-        when(userMapper.convertToUserDto(user)).thenReturn(userDto);
-        when(userMapper.convertToUser(UPDATED_USER_DTO)).thenReturn(updatedUser);
-        when(userDao.update(email, updatedUser)).thenReturn(updatedUser);
-        when(userMapper.convertToUserDto(updatedUser)).thenReturn(UPDATED_USER_DTO);
+        String email = EMAIL;
+        doCallRealMethod().when(userValidator).validate(any(), any());
+        when(userService.patchUpdate(eq(email), any())).thenReturn(UPDATED_USER_DTO);
         // when
         // then
         mvc.perform(MockMvcRequestBuilders
@@ -319,31 +326,33 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(JSON_NODE.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value("new@gmail.com"));
+                .andExpect(jsonPath($_EMAIL).value(UPDATED_EMAIL));
     }
 
     @Test
     void patchUpdate_NonExistentUser_ReturnsNotFound() throws Exception {
         // given
+        UserNotFoundException userNotFoundException =
+                new UserNotFoundException(USER_WITH_EMAIL_NONEXISTENT_GMAIL_COM_NOT_FOUND);
         String email = "nonexistent@gmail.com";
+        when(userService.patchUpdate(eq(email), any())).thenThrow(userNotFoundException);
         // when
-        when(userDao.findByEmail(email)).thenReturn(Optional.empty());
         // then
         mvc.perform(MockMvcRequestBuilders
                         .patch("/users/{email}", email)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(JSON_NODE.toString()))
-                .andExpect(jsonPath("$.message").value("User with email nonexistent@gmail.com not found"))
+                .andExpect(jsonPath(MESSAGE).value(USER_WITH_EMAIL_NONEXISTENT_GMAIL_COM_NOT_FOUND))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void patchUpdate_NonExistentUser_ReturnsNotUpdated() throws Exception {
         // given
+        UserNotUpdatedException userNotUpdatedException =
+                new UserNotUpdatedException(USER_WITH_EMAIL_USER_EXAMPLE_COM_NOT_UPDATED);
         String email = "user@example.com";
-
-        when(userDao.findByEmail(email)).thenReturn(Optional.of(new User()));
-        when(userMapper.convertToUserDto(any(User.class))).thenReturn(new UserDto());
+        when(userService.patchUpdate(eq(email), any())).thenThrow(userNotUpdatedException);
 
         //when then
         mvc.perform(MockMvcRequestBuilders
@@ -351,13 +360,13 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(JSON_INCORRECT_NODE.toString()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("User with email user@example.com not updated"));
+                .andExpect(jsonPath(MESSAGE).value(USER_WITH_EMAIL_USER_EXAMPLE_COM_NOT_UPDATED));
     }
 
 
-    private static UserDto createTestUserDto() {
+    private static UserDto createUserDto(String email) {
         UserDto userDto = new UserDto();
-        userDto.setEmail("test@gmail.com");
+        userDto.setEmail(email);
         userDto.setFirstName("John");
         userDto.setLastName("Obama");
         userDto.setBirthDate(LocalDate.of(2000, 1, 1));
@@ -377,16 +386,6 @@ class UserControllerTest {
         return user;
     }
 
-    private static UserDto createUpdatedUserDto() {
-        UserDto userDto = new UserDto();
-        userDto.setEmail("new@gmail.com");
-        userDto.setFirstName("John");
-        userDto.setLastName("Obama");
-        userDto.setBirthDate(LocalDate.of(2000, 1, 1));
-        userDto.setAddress("Kyiv, 25");
-        userDto.setPhoneNumber("+1234567890");
-        return userDto;
-    }
 
     private static JsonNode createJsonPatch() {
         ObjectNode patchOperations = JsonNodeFactory.instance.objectNode();

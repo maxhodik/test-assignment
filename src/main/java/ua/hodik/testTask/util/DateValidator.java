@@ -21,7 +21,7 @@ public class DateValidator implements AbstractValidator {
         DateFormDto dateFormDto = (DateFormDto) target;
         LocalDate from = dateFormDto.getFrom();
         LocalDate to = dateFormDto.getTo();
-        if(from.isAfter(to)){
+        if (from.isAfter(to) || from.isEqual(to)) {
             errors.rejectValue("from", "", "'From' date should be before 'to' date");
         }
         bindErrors((BindingResult) errors);

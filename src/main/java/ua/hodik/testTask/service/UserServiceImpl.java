@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.fge.jsonpatch.JsonPatch;
 import com.github.fge.jsonpatch.JsonPatchException;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.BeanPropertyBindingResult;
@@ -44,7 +43,7 @@ public class UserServiceImpl implements UserService {
     public UserDto patchUpdate(String email, JsonPatch jsonPatch) {
         User user = userDao.findByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException(String.format("User with email %s not found", email)));
-        UserDto userDtoToUpdate = getUserDtoToUpdate(email, jsonPatch, user);
+        UserDto userDtoToUpdate = patchUser(email, jsonPatch, user);
         BindingResult errors = new BeanPropertyBindingResult(userDtoToUpdate, "userDtoToUpdate");
         userValidator.validate(userDtoToUpdate, errors);
         return update(email, userDtoToUpdate);
@@ -87,7 +86,7 @@ public class UserServiceImpl implements UserService {
         return getUserDtoList(users);
     }
 
-    private UserDto getUserDtoToUpdate(String email, JsonPatch jsonPatch, User user) {
+    private UserDto patchUser(String email, JsonPatch jsonPatch, User user) {
         UserDto userDto = userMapper.convertToUserDto(user);
         UserDto userDtoToUpdate;
         try {
@@ -99,7 +98,8 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserDto applyPatchToUser(JsonPatch patch, UserDto targetUser) throws JsonPatchException, JsonProcessingException {
-        JsonNode patched = patch.apply(objectMapper.convertValue(targetUser, JsonNode.class));
+        JsonNode node = objectMapper.convertValue(targetUser, JsonNode.class);
+        JsonNode patched = patch.apply(node);
         return objectMapper.treeToValue(patched, UserDto.class);
     }
 

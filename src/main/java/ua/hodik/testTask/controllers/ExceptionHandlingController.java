@@ -25,12 +25,6 @@ public class ExceptionHandlingController {
 
     }
 
-    @ExceptionHandler
-    private ResponseEntity<ErrorResponse> exceptionHandler(UserNotCreatedException e) {
-        ErrorResponse message = new ErrorResponse(e.getMessage());
-
-        return new ResponseEntity<>(message, HttpStatus.BAD_REQUEST);
-    }
 
     @ExceptionHandler
     private ResponseEntity<ErrorResponse> exceptionHandler(IllegalArgumentException e) {
